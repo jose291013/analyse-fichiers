@@ -22,9 +22,10 @@ app.post('/analyze', upload.single('FILE'), async (req, res) => {
 
     let result;
     if (ext === '.svg') {
-      result = await svgAnalyzer.analyze(file.path);
+      result = await svgAnalyzer.analyzeSVG(file.path);
     } else if (ext === '.eps') {
-      result = await epsAnalyzer.analyze(file.path);
+      result = await svgAnalyzer.analyzeEPS(file.path);
+
     } else {
       return res.status(400).json({ error: 'Fichier non supporté' });
     }
