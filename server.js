@@ -2,46 +2,41 @@
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
-const path = require('path');
 const fs = require('fs');
-const { analyzeSVG } = require('./analyzers/svgAnalyzer');
-const { analyzeEPS } = require('./analyzers/epsAnalyzer');
+const path = require('path');
+
+const svgAnalyzer = require('./analyzers/svgAnalyzer');
+const epsAnalyzer = require('./analyzers/epsAnalyzer');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
 
-// Setup de multer
 const upload = multer({ dest: 'uploads/' });
 
-// Endpoint d'analyse de fichiers
-app.post('/analyze', upload.single('file'), async (req, res) => {
+app.post('/analyze', upload.single('FILE'), async (req, res) => {
   try {
-    const filePath = req.file.path;
-    const extension = path.extname(req.file.originalname).toLowerCase();
+    const file = req.file;
+    const ext = path.extname(file.originalname).toLowerCase();
 
     let result;
-
-    if (extension === '.svg') {
-      result = await analyzeSVG(filePath);
-    } else if (extension === '.eps') {
-      result = await analyzeEPS(filePath);
+    if (ext === '.svg') {
+      result = await svgAnalyzer.analyze(file.path);
+    } else if (ext === '.eps') {
+      result = await epsAnalyzer.analyze(file.path);
     } else {
-      return res.status(400).json({ error: 'Format non pris en charge.' });
+      return res.status(400).json({ error: 'Fichier non supporté' });
     }
 
-    // Nettoyage
-    fs.unlinkSync(filePath);
-
+    fs.unlinkSync(file.path); // nettoyer
     res.json(result);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Erreur lors de l’analyse.' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Serveur lancé sur le port ${PORT}`);
+app.listen(port, () => {
+  console.log(`Serveur en ligne sur le port ${port}`);
 });
