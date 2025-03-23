@@ -1,64 +1,67 @@
-// analyzers/epsAnalyzer.js
 const fs = require('fs');
 
-function ptToMm(pt) {
-  return (pt * 25.4) / 72;
-}
-
-function mmToPt(mm) {
-  return (mm * 72) / 25.4;
-}
-
 async function analyzeEPS(filePath) {
-  const epsContent = fs.readFileSync(filePath, 'utf8');
-  const bboxMatch = epsContent.match(/%%BoundingBox: (\d+) (\d+) (\d+) (\d+)/);
+  const epsData = fs.readFileSync(filePath, 'utf8');
+
+  const bboxMatch = epsData.match(/%%BoundingBox: (\d+) (\d+) (\d+) (\d+)/);
 
   if (!bboxMatch) {
-    return { error: 'BoundingBox introuvable' };
+    return { type: 'EPS', error: 'BoundingBox introuvable' };
   }
 
-  let [xMin, yMin, xMax, yMax] = bboxMatch.slice(1).map(Number);
-  let width = xMax - xMin;
-  let height = yMax - yMin;
+  const [xMin, yMin, xMax, yMax] = bboxMatch.slice(1).map(Number);
+  const widthPt = xMax - xMin;
+  const heightPt = yMax - yMin;
 
-  let widthMm = ptToMm(width);
-  let heightMm = ptToMm(height);
-
-  const artboardMatch = epsContent.match(/%%HiResBoundingBox: (\d+\.?\d*) (\d+\.?\d*) (\d+\.?\d*) (\d+\.?\d*)/);
-  let artboardMatchesContent = false;
+  // Extraction Artboard (plan de travail)
+  const artboardMatch = epsData.match(/%%HiResBoundingBox: ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)/);
+  let artboardWidthPt = widthPt, artboardHeightPt = heightPt;
 
   if (artboardMatch) {
-    let [axMin, ayMin, axMax, ayMax] = artboardMatch.slice(1).map(Number);
-    artboardMatchesContent = (axMin === xMin && ayMin === yMin && axMax === xMax && ayMax === yMax);
+    const [axMin, ayMin, axMax, ayMax] = artboardMatch.slice(1).map(Number);
+    artboardWidthPt = axMax - axMin;
+    artboardHeightPt = ayMax - ayMin;
   }
 
+  const pointsToMM = pt => pt * (25.4 / 72);
+
+  const widthMM = pointsToMM(widthPt);
+  const heightMM = pointsToMM(heightPt);
+  const artboardWidthMM = pointsToMM(artboardWidthPt);
+  const artboardHeightMM = pointsToMM(artboardHeightPt);
+
+  // Comparaison sur valeurs ENTIÈRES
+  const isSameWidth = Math.floor(widthMM) === Math.floor(artboardWidthMM);
+  const isSameHeight = Math.floor(heightMM) === Math.floor(artboardHeightMM);
+
+  let modified = false;
   let modifiedFilePath = null;
 
-  if (artboardMatchesContent) {
-    // Ajouter 2 mm (convertis en points)
-    const extraMarginPt = mmToPt(2);
-    xMin -= extraMarginPt;
-    yMin -= extraMarginPt;
-    xMax += extraMarginPt;
-    yMax += extraMarginPt;
+  if (isSameWidth && isSameHeight) {
+    const marginPt = (2 / 25.4) * 72;
+    const newXMin = xMin - marginPt;
+    const newYMin = yMin - marginPt;
+    const newXMax = xMax + marginPt;
+    const newYMax = yMax + marginPt;
 
-    const modifiedEPS = epsContent.replace(
-      /(%%BoundingBox: )(\d+) (\d+) (\d+) (\d+)/,
-      `$1${Math.floor(xMin)} ${Math.floor(yMin)} ${Math.ceil(xMax)} ${Math.ceil(yMax)}`
+    const modifiedEPS = epsData.replace(
+      /%%BoundingBox: \d+ \d+ \d+ \d+/,
+      `%%BoundingBox: ${Math.round(newXMin)} ${Math.round(newYMin)} ${Math.round(newXMax)} ${Math.round(newYMax)}`
     );
 
-    // Sauvegarde du fichier modifié
     modifiedFilePath = `modified/${Date.now()}_modified.eps`;
-    fs.writeFileSync(modifiedFilePath, modifiedEPS, 'utf8');
+    fs.writeFileSync(modifiedFilePath, modifiedEPS);
+    modified = true;
   }
 
   return {
     type: 'EPS',
-    width_mm: +widthMm.toFixed(2),
-    height_mm: +heightMm.toFixed(2),
-    modified: artboardMatchesContent,
-    modifiedFilePath
+    width_mm: parseFloat(widthMM.toFixed(2)),
+    height_mm: parseFloat(heightMM.toFixed(2)),
+    modified,
+    modifiedFilePath,
   };
 }
 
 module.exports = { analyzeEPS };
+
