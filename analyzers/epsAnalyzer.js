@@ -1,28 +1,24 @@
-// analyzers/epsAnalyzer.js
 const fs = require('fs');
 
 async function analyzeEPS(filePath) {
-  const data = fs.readFileSync(filePath, 'utf8');
-  const boundingBoxLine = data.split('\n').find(line => line.startsWith('%%BoundingBox:'));
+  const epsData = fs.readFileSync(filePath, 'utf8');
+  const boundingBoxLine = epsData.match(/%%BoundingBox: (\d+) (\d+) (\d+) (\d+)/);
 
-  if (!boundingBoxLine) {
-    throw new Error('BoundingBox non trouvé');
-  }
+  if (!boundingBoxLine) throw new Error("BoundingBox introuvable.");
 
-  const parts = boundingBoxLine.split(' ');
-  const x1 = parseFloat(parts[1]);
-  const y1 = parseFloat(parts[2]);
-  const x2 = parseFloat(parts[3]);
-  const y2 = parseFloat(parts[4]);
+  const [_, x1, y1, x2, y2] = boundingBoxLine.map(Number);
 
   const width = x2 - x1;
   const height = y2 - y1;
 
+  const mmPerPoint = 25.4 / 72; // 1 point EPS = 1/72 inch
+
   return {
     type: 'EPS',
-    width,
-    height,
-    unit: 'pt' // PostScript points (1 pt = 1/72 inch)
+    boundingBox: { x1, y1, x2, y2 },
+    width_mm: +(width * mmPerPoint).toFixed(2),
+    height_mm: +(height * mmPerPoint).toFixed(2),
+    unit: 'mm',
   };
 }
 
