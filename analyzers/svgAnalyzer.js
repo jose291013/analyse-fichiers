@@ -1,49 +1,48 @@
 // analyzers/svgAnalyzer.js
-// analyzers/svgAnalyzer.js
 const fs = require('fs');
-const { parseStringPromise } = require('xml2js');
+const { parse } = require('svgson');
+const getBounds = require('svg-path-bounding-box');
 
 async function analyzeSVG(filePath) {
   const data = fs.readFileSync(filePath, 'utf8');
-  const result = await parseStringPromise(data);
-  const svgAttrs = result.svg.$;
+  const svgJSON = await parse(data);
 
-  let width = 0;
-  let height = 0;
-  let unit = 'px';
+  let globalBounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 
-  // Fonction pour extraire valeur + unité
-  const parseDimension = (dim) => {
-    const match = dim.match(/^([\d.]+)([a-z%]*)$/i);
-    if (match) {
-      return { value: parseFloat(match[1]), unit: match[2] || 'px' };
+  const traverse = (node) => {
+    if (node.name === 'path' && node.attributes.d) {
+      const bounds = getBounds(node.attributes.d);
+      globalBounds.minX = Math.min(globalBounds.minX, bounds.minX);
+      globalBounds.minY = Math.min(globalBounds.minY, bounds.minY);
+      globalBounds.maxX = Math.max(globalBounds.maxX, bounds.maxX);
+      globalBounds.maxY = Math.max(globalBounds.maxY, bounds.maxY);
     }
-    return { value: 0, unit: 'px' };
+    if (node.children) {
+      node.children.forEach(traverse);
+    }
   };
 
-  if (svgAttrs.width && svgAttrs.height) {
-    const w = parseDimension(svgAttrs.width);
-    const h = parseDimension(svgAttrs.height);
-    width = w.value;
-    height = h.value;
-    unit = w.unit;
-  } else if (svgAttrs.viewBox) {
-    // fallback : utiliser viewBox
-    const viewBoxParts = svgAttrs.viewBox.split(/\s+/);
-    if (viewBoxParts.length === 4) {
-      width = parseFloat(viewBoxParts[2]);
-      height = parseFloat(viewBoxParts[3]);
-    }
+  traverse(svgJSON);
+
+  if (globalBounds.minX === Infinity) {
+    return { error: "Aucun chemin vectoriel détecté." };
   }
+
+  const widthPx = globalBounds.maxX - globalBounds.minX;
+  const heightPx = globalBounds.maxY - globalBounds.minY;
+
+  const dpi = 96;
+  const mm_per_inch = 25.4;
 
   return {
     type: 'SVG',
-    width,
-    height,
-    unit
+    width_mm: parseFloat(((widthPx / dpi) * mm_per_inch).toFixed(2)),
+    height_mm: parseFloat(((heightPx / dpi) * mm_per_inch).toFixed(2)),
+    unit: 'mm'
   };
 }
 
 module.exports = { analyzeSVG };
+
 
   

@@ -13,6 +13,8 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "multer": "^1.4.5-lts.2",
+    "svg-path-bounding-box": "^1.0.4",
+    "svgson": "^5.3.1",
     "xml2js": "^0.6.2"
   }
 }
