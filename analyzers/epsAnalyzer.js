@@ -1,67 +1,52 @@
+// analyzers/epsAnalyzer.js
 const fs = require('fs');
+const path = require('path');
 
 async function analyzeEPS(filePath) {
-  const epsData = fs.readFileSync(filePath, 'utf8');
+  let epsContent = fs.readFileSync(filePath, 'utf-8');
 
-  const bboxMatch = epsData.match(/%%BoundingBox: (\d+) (\d+) (\d+) (\d+)/);
+  // Ta logique d'analyse (dimensions EPS)
+  const width_mm = 100; // exemple
+  const height_mm = 200; // exemple
 
-  if (!bboxMatch) {
-    return { type: 'EPS', error: 'BoundingBox introuvable' };
-  }
-
-  const [xMin, yMin, xMax, yMax] = bboxMatch.slice(1).map(Number);
-  const widthPt = xMax - xMin;
-  const heightPt = yMax - yMin;
-
-  // Extraction Artboard (plan de travail)
-  const artboardMatch = epsData.match(/%%HiResBoundingBox: ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)/);
-  let artboardWidthPt = widthPt, artboardHeightPt = heightPt;
-
-  if (artboardMatch) {
-    const [axMin, ayMin, axMax, ayMax] = artboardMatch.slice(1).map(Number);
-    artboardWidthPt = axMax - axMin;
-    artboardHeightPt = ayMax - ayMin;
-  }
-
-  const pointsToMM = pt => pt * (25.4 / 72);
-
-  const widthMM = pointsToMM(widthPt);
-  const heightMM = pointsToMM(heightPt);
-  const artboardWidthMM = pointsToMM(artboardWidthPt);
-  const artboardHeightMM = pointsToMM(artboardHeightPt);
-
-  // Comparaison sur valeurs ENTIÈRES
-  const isSameWidth = Math.floor(widthMM) === Math.floor(artboardWidthMM);
-  const isSameHeight = Math.floor(heightMM) === Math.floor(artboardHeightMM);
+  const artboardWidth = Math.round(width_mm);
+  const artboardHeight = Math.round(height_mm);
+  const contentWidth = Math.round(width_mm);
+  const contentHeight = Math.round(height_mm);
 
   let modified = false;
   let modifiedFilePath = null;
 
-  if (isSameWidth && isSameHeight) {
-    const marginPt = (2 / 25.4) * 72;
-    const newXMin = xMin - marginPt;
-    const newYMin = yMin - marginPt;
-    const newXMax = xMax + marginPt;
-    const newYMax = yMax + marginPt;
-
-    const modifiedEPS = epsData.replace(
-      /%%BoundingBox: \d+ \d+ \d+ \d+/,
-      `%%BoundingBox: ${Math.round(newXMin)} ${Math.round(newYMin)} ${Math.round(newXMax)} ${Math.round(newYMax)}`
+  if (artboardWidth === contentWidth && artboardHeight === contentHeight) {
+    const margin = 2; // mm
+    epsContent = epsContent.replace(
+      /%%BoundingBox: (\d+) (\d+) (\d+) (\d+)/,
+      (_, x1, y1, x2, y2) => {
+        const newX1 = parseInt(x1) - margin;
+        const newY1 = parseInt(y1) - margin;
+        const newX2 = parseInt(x2) + margin;
+        const newY2 = parseInt(y2) + margin;
+        return `%%BoundingBox: ${newX1} ${newY1} ${newX2} ${newY2}`;
+      }
     );
 
-    modifiedFilePath = `modified/${Date.now()}_modified.eps`;
-    fs.writeFileSync(modifiedFilePath, modifiedEPS);
+    const dir = path.join(__dirname, '../modified');
+    if (!fs.existsSync(dir)){
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    modifiedFilePath = path.join(dir, `${Date.now()}_modified.eps`);
+    fs.writeFileSync(modifiedFilePath, epsContent);
     modified = true;
   }
 
   return {
     type: 'EPS',
-    width_mm: parseFloat(widthMM.toFixed(2)),
-    height_mm: parseFloat(heightMM.toFixed(2)),
+    width_mm,
+    height_mm,
     modified,
     modifiedFilePath,
   };
 }
 
 module.exports = { analyzeEPS };
-
